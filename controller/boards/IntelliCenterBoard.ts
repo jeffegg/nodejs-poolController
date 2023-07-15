@@ -3552,6 +3552,10 @@ class IntelliCenterValveCommands extends ValveCommands {
         valve.name = v.name;
         valve.circuit = v.circuit;
         valve.type = v.type;
+
+        valve.endstop0Value = typeof obj.endstop0Value !== 'undefined' ? obj.endstop0Value : valve.endstop0Value;
+        valve.endstop24Value = typeof obj.endstop24Value !== 'undefined' ? obj.endstop24Value : valve.endstop24Value;
+        valve.address = typeof obj.address !== 'undefined' ? obj.address : valve.address;
         return valve;
     }
 }

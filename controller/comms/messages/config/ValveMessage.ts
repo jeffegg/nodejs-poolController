@@ -110,7 +110,7 @@ export class ValveMessage {
                     valve.isIntake = true;
                     valve.isReturn = false;
                     valve.isActive = true;
-                    valve.type = 0;
+                    valve.type = valve.type;
                     let svalve = state.valves.getItemById(id, true);
                     svalve.name = valve.name;
                     svalve.type = valve.type;
@@ -129,7 +129,7 @@ export class ValveMessage {
                     valve.isIntake = false;
                     valve.isReturn = true;
                     valve.isActive = true;
-                    valve.type = 0;
+                    valve.type = valve.type;
                     let svalve = state.valves.getItemById(id, true);
                     svalve.name = valve.name;
                     svalve.type = valve.type;
@@ -152,13 +152,14 @@ export class ValveMessage {
                 valve.isActive = true;
                 valve.isReturn = false;
                 valve.isIntake = false;
-                valve.type = 0;
+                valve.type = valve.type;
                 valve.master = 0;
                 // Allow users to name the valve whatever they want.  *Touch apparently only allows the valve to be named the same
                 // as the circuit but this should be fine if we allow the user to edit it.
                 valve.name = (typeof valve.name === 'undefined') ? ValveMessage.getName(id, valve.circuit) : valve.name;
                 let svalve = state.valves.getItemById(id, true);
                 svalve.name = valve.name;
+                svalve.type = valve.type;
             }
             id++;
         }

@@ -28,6 +28,8 @@ import { delayMgr } from '../Lockouts';
 import { webApp } from "../../web/Server";
 import { setTimeout } from 'timers/promises';
 import { setTimeout as setTimeoutSync } from 'timers';
+import {Outbound, Protocol, Response} from "../comms/messages/Messages";
+import {conn} from "../comms/Comms";
 
 export class NixieBoard extends SystemBoard {
     constructor (system: PoolSystem){
@@ -1712,6 +1714,55 @@ export class NixieValveCommands extends ValveCommands {
             valve.connectionId = typeof obj.connectionId ? obj.connectionId : valve.connectionId;
             valve.deviceBinding = typeof obj.deviceBinding !== 'undefined' ? obj.deviceBinding : valve.deviceBinding;
             valve.pinId = typeof obj.pinId !== 'undefined' ? obj.pinId : valve.pinId;
+            valve.type = typeof obj.type !== 'undefined' ? obj.type : valve.type;
+            valve.endstop0Value = typeof obj.endstop0Value !== 'undefined' ? obj.endstop0Value : valve.endstop0Value;
+            valve.endstop24Value = typeof obj.endstop24Value !== 'undefined' ? obj.endstop24Value : valve.endstop24Value;
+
+            let old_valve_address = valve.address;
+            let outc = Outbound.create({
+                                portId: 0,
+                                protocol: Protocol.IntelliValve,
+                                dest: old_valve_address,
+                                action: 0x28,
+                                payload: valve.UUID,
+                                retries: 10,
+                                response: false,
+                                onComplete: (err, _) => {
+                                    if (err) {
+                                        logger.error(`Intellivalve VALVE_SET_ENDSTOPS failed for ${valve.name}: ${err.message}`);
+                                    }
+                                }
+                            });
+            outc.appendPayloadByte(valve.endstop0Value);
+            outc.appendPayloadByte(valve.endstop24Value);
+            //await outc.sendAsync();
+
+            // Only send address if it changes
+            if ((typeof obj.address !== 'undefined') && (valve.address != obj.address)) {
+                logger.info(`Intellivalve VALVE_SET_ADDR for ${valve.name} new: ${obj.address.toString()} old: ${valve.address.toString(16)}`);
+                valve.address = obj.address;
+                let address_outc = Outbound.create({
+                    portId: 0,
+                    protocol: Protocol.IntelliValve,
+                    dest: old_valve_address,
+                    action: 0x20,
+                    payload: valve.UUID,
+                    retries: 10,
+                    response: false,
+                    onComplete: (err, _) => {
+                        if (err) {
+                            logger.error(`Intellivalve VALVE_SET_ADDR failed for ${valve.name}: ${err.message}`);
+                        }
+                    }
+                });
+                address_outc.appendPayloadByte(valve.address);
+                await address_outc.sendAsync();
+            }
+            else{
+                logger.info(`Intellivalve not updating address for ${valve.name} new: ${obj.address.toString()} old: ${valve.address.toString(16)}`);
+                valve.address = typeof obj.address !== 'undefined' ? obj.address : valve.address;
+            }
+
             await ncp.valves.setValveAsync(valve, obj);
             await sys.board.syncEquipmentItems();
             return valve;

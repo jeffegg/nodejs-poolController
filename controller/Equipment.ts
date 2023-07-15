@@ -1723,6 +1723,47 @@ export class Valve extends EqItem {
     public set connectionId(val: string) { this.setDataVal('connectionId', val); }
     public get deviceBinding(): string { return this.data.deviceBinding; }
     public set deviceBinding(val: string) { this.setDataVal('deviceBinding', val); }
+    public get UUID(): number[] { return this.data.UUID; }
+    public set UUID(val: number[]) { this.setDataVal('UUID', val); }
+    public get address(): number { return this.data.address; }
+    public set address(val: number) { this.setDataVal('address', val); }
+
+    public get fwVersion(): number { return this.data.fwVersion; }
+    public set fwVersion(val: number) { this.setDataVal('fwVersion', val); }
+    public get fwDate(): number { return this.data.fwDate; }
+    public set fwDate(val: number) { this.setDataVal('fwDate', val); }
+
+    public get did(): number { return this.data.did; }
+    public set did(val: number) { this.setDataVal('did', val); }
+    public get rid(): number { return this.data.rid; }
+    public set rid(val: number) { this.setDataVal('rid', val); }
+
+    public get endstop0Value(): number { return this.data.endstop0Value; }
+    public set endstop0Value(val: number) { this.setDataVal('endstop0Value', val); }
+
+    public get endstop24Value(): number { return this.data.endstop24Value; }
+    public set endstop24Value(val: number) { this.setDataVal('endstop24Value', val); }
+
+    public get selectedEndstop(): string { return this.data.selectedEndstop; }
+    public set selectedEndstop(val: string) { this.setDataVal('selectedEndstop', val); }
+
+    public get currentPosition(): number { return this.data.currentPosition; }
+    public set currentPosition(val: number) { this.setDataVal('currentPosition', val); }
+
+    public get currentMode(): string { return this.data.currentMode; }
+    public set currentMode(val: string) { this.setDataVal('currentMode', val); }
+
+    public get fwType(): string { return this.data.fwType; }
+    public set fwType(val: string) { this.setDataVal('fwType', val); }
+
+    public get fwTag(): string { return this.data.fwTag; }
+    public set fwTag(val: string) { this.setDataVal('fwTag', val); }
+
+    public get fwBranch(): string { return this.data.fwBranch; }
+    public set fwBranch(val: string) { this.setDataVal('fwBranch', val); }
+
+    public get resetReason(): string { return this.data.resetReason; }
+    public set resetReason(val: string) { this.setDataVal('resetReason', val); }
 }
 export class HeaterCollection extends EqItemCollection<Heater> {
     constructor(data: any, name?: string) { super(data, name || "heaters"); }

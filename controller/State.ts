@@ -2064,6 +2064,53 @@ export class ValveState extends EqState {
             this.hasChanged = true;
         }
     }
+
+    public get isActive(): boolean { return this.data.isActive; }
+    public set isActive(val: boolean) { this.setDataVal('isActive', val); }
+    public get fwVersion(): number { return this.data.fwVersion; }
+    public set fwVersion(val: number) { this.setDataVal('fwVersion', val); }
+    public get fwDate(): number { return this.data.fwDate; }
+    public set fwDate(val: number) { this.setDataVal('fwDate', val); }
+    public get did(): number { return this.data.did; }
+    public set did(val: number) { this.setDataVal('did', val); }
+    public get rid(): number { return this.data.rid; }
+    public set rid(val: number) { this.setDataVal('rid', val); }
+    public get fwType(): string { return this.data.fwType; }
+    public set fwType(val: string) { this.setDataVal('fwType', val);}
+
+    public get fwTag(): string { return this.data.fwTag; }
+    public set fwTag(val: string) { this.setDataVal('fwTag', val); }
+    public get fwBranch(): string { return this.data.fwBranch; }
+    public set fwBranch(val: string) { this.setDataVal('fwBranch', val);}
+
+    public get endstop0Value(): number { return this.data.endstop0Value; }
+    public set endstop0Value(val: number) { this.setDataVal('endstop0Value', val); }
+    public get endstop24Value(): number { return this.data.endstop24Value; }
+    public set endstop24Value(val: number) { this.setDataVal('endstop24Value', val); }
+    public get selectedEndstop(): string { return this.data.selectedEndstop; }
+    public set selectedEndstop(val: string) { this.setDataVal('selectedEndstop', val); }
+    public get currentPosition(): number { return this.data.currentPosition; }
+    public set currentPosition(val: number) { this.setDataVal('currentPosition', val); }
+    public get currentMode(): string { return this.data.currentMode; }
+    public set currentMode(val: string) { this.setDataVal('currentMode', val); }
+
+
+    public get address(): number { return typeof this.data.address !== 'undefined' ? this.data.address : -1; }
+    public set address(val: number) {
+        if (this.address !== val) {
+            this.data.address = val;
+            this.hasChanged = true;
+        }
+    }
+
+    public get UUID(): number[] { return typeof this.data.UUID !== 'undefined' ? this.data.UUID : -1; }
+    public set UUID(val: number[]) {
+        if (this.UUID !== val) {
+            this.data.UUID = val;
+            this.hasChanged = true;
+        }
+    }
+
     public get isDiverted(): boolean { return utils.makeBool(this.data.isDiverted); }
     public set isDiverted(val: boolean) { this.setDataVal('isDiverted', val); }
     public get commStatus(): number { return this.data.commStatus; }

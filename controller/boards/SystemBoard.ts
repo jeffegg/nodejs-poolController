@@ -4572,6 +4572,10 @@ export class ValveCommands extends BoardCommands {
             valve.connectionId = typeof obj.connectionId ? obj.connectionId : valve.connectionId;
             valve.deviceBinding = typeof obj.deviceBinding !== 'undefined' ? obj.deviceBinding : valve.deviceBinding;
             valve.pinId = typeof obj.pinId !== 'undefined' ? obj.pinId : valve.pinId;
+            valve.type = typeof obj.type !== 'undefined' ? obj.type : valve.type;
+            valve.endstop0Value = typeof obj.endstop0Value !== 'undefined' ? obj.endstop0Value : valve.endstop0Value;
+            valve.endstop24Value = typeof obj.endstop24Value !== 'undefined' ? obj.endstop24Value : valve.endstop24Value;
+            valve.address = typeof obj.address !== 'undefined' ? obj.address : valve.address;
             await ncp.valves.setValveAsync(valve, obj);
             sys.board.valves.syncValveStates();
             return valve;

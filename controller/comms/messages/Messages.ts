@@ -444,6 +444,8 @@ export class Inbound extends Message {
                 else if (this.dest >= 144 && this.dest <= 158) this.protocol = Protocol.IntelliChem;
                 else if (this.source >= 144 && this.source <= 158) this.protocol = Protocol.IntelliChem;
                 else if (this.source == 12 || this.dest == 12) this.protocol = Protocol.IntelliValve;
+                else if (this.dest >= 160 && this.dest <= 180) this.protocol = Protocol.IntelliValve;
+                else if (this.source >= 160 && this.source <= 180) this.protocol = Protocol.IntelliValve;
                 if (this.datalen > 75) {
                     //this.isValid = false;
                     logger.debug(`Broadcast length ${this.datalen} exceeded 75 bytes for ${this.protocol} message. Message rewound ${this.header}`);
@@ -634,6 +636,11 @@ export class Inbound extends Message {
     public extractPayloadByte(ndx: number, def?: number) {
         return ndx < this.payload.length ? this.payload[ndx] : def;
     }
+
+    public extractPayloadDWord(ndx: number, def?: number) {
+        return ndx + 3 < this.payload.length ? (this.payload[ndx + 3] * 16777216) + (this.payload[ndx + 2] * 65536) + (this.payload[ndx + 1] * 256) + this.payload[ndx] : def;
+
+    }
     private processBroadcast(): void {
         if (this.action !== 2 && !state.isInitialized) {
             // RKS: This is a placeholder for now so that messages aren't processed until we
@@ -767,6 +774,9 @@ export class Inbound extends Message {
                         break;
                     case 136:
                         ExternalMessage.processTouchSetHeatMode(this);
+                        break;
+                    case 82:
+                        IntelliValveStateMessage.process(this);
                         break;
                     default:
                         if (this.action === 109 && this.payload[1] === 3) break;
