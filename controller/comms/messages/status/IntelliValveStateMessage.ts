@@ -41,7 +41,7 @@ export class IntelliValveStateMessage {
                 else if (currentModeNum === 0x6)
                     currentMode = 'Maintenance'
 
-                let uuid_array_1 = [msg.payload[2], msg.payload[3], msg.payload[4], msg.payload[5], msg.payload[6], msg.payload[7]];
+                let uuid_array_1 = [msg.payload[0], msg.payload[1], msg.payload[2], msg.payload[3], msg.payload[4], msg.payload[5]];
 
                 logger.info(`VALVE_ENDSTOPS(${msg.action}) from valve ${msg.source}, with data: ${msg.payload}`);
                 logger.info(`Valve UUID:        ${uuid_array_1.toString()}`);
@@ -91,7 +91,7 @@ export class IntelliValveStateMessage {
                 if ((msg.source == 12) && (msg.payload.length == 8))// Pentair FW found, don't add valve+
                 {
                     if ((msg.payload[0] == 0x0) && (msg.payload[1] == 0x80)) {
-                        uuid_array = [msg.payload[0], msg.payload[1], msg.payload[2], msg.payload[3], msg.payload[4], msg.payload[5]];
+                        uuid_array = [msg.payload[2], msg.payload[3], msg.payload[4], msg.payload[5], msg.payload[6], msg.payload[7]];
                         logger.info(`Hail Seen(${msg.action}) from valve with Pentair FW: ${msg.source}, with data: ${msg.payload}`);
                         logger.info(`Valve UUID: ${uuid_array.toString()}`);
                         gitHash = 0xFFFF
