@@ -41,7 +41,7 @@ export class IntelliValveStateMessage {
                 else if (currentModeNum === 0x6)
                     currentMode = 'Maintenance'
 
-                let uuid_array_1 = [msg.payload[0], msg.payload[1], msg.payload[2], msg.payload[3], msg.payload[4], msg.payload[5]];
+                let uuid_array_1 = [msg.payload[2], msg.payload[3], msg.payload[4], msg.payload[5], msg.payload[6], msg.payload[7]];
 
                 logger.info(`VALVE_ENDSTOPS(${msg.action}) from valve ${msg.source}, with data: ${msg.payload}`);
                 logger.info(`Valve UUID:        ${uuid_array_1.toString()}`);
