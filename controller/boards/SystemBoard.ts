@@ -4582,6 +4582,16 @@ export class ValveCommands extends BoardCommands {
         } catch (err) { logger.error(`Nixie: Error setting valve definition. ${err.message}`); return Promise.reject(err); }
     }
 
+    public async searchValveAsync(){
+        try {
+            await ncp.valves.searchValveAsync();
+            ncp.valves.
+        }
+        catch (err) {
+            logger.error(`Nixie: Error searching for valve. ${err.message}`);
+        }
+    }
+
     public async deleteValveAsync(obj: any): Promise<Valve> {
         let id = parseInt(obj.id, 10);
         try {

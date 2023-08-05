@@ -615,7 +615,7 @@ class EqItemCollection<T> implements IEqItemCollection {
     public getItemById(id: number | string, add?: boolean, data?: any): T {
         let itm = this.find(elem => { return typeof (elem as { id?}).id !== 'undefined' && (elem as { id?}).id === id });
         if (typeof itm !== 'undefined') return itm;
-        if (typeof add !== 'undefined' && add) return this.add(extend(true, { id: id }, data));
+        if (typeof add !== 'undefined' && add) {return this.add(extend(true, { id: id }, data));}
         return this.createItem(data || { id: id });
     }
     public removeItemById(id: number | string): T {
@@ -1676,6 +1676,27 @@ export class Chlorinator extends EqItem {
     public get model() { return this.data.model; }
     public set model(val: number | any) { this.setDataVal('model', sys.board.valueMaps.chlorinatorModel.encode(val)); }
 }
+
+export class ValveCircuitCollection extends EqItemCollection<ValveCircuit> {
+    constructor(data: any, name?: string) { super(data, name || "circuits"); }
+    public createItem(data: any): ValveCircuit { return new ValveCircuit(data); }
+}
+export class ValveCircuit extends EqItem {
+    public dataName = 'pumpCircuitConfig';
+    public get id(): number { return this.data.id; }
+    public set id(val: number) { this.setDataVal('id', val); }
+    public get circuit(): number { return this.data.circuit; }
+    public set circuit(val: number) { this.setDataVal('circuit', val); }
+    public get endstop0Value(): number { return this.data.endstop0Value; }
+    public set endstop0Value(val: number) { this.setDataVal('endstop0Value', val); }
+    public get endstop24Value(): number { return this.data.endstop24Value; }
+    public set endstop24Value(val: number) { this.setDataVal('endstop24Value', val); }
+    public get selectedEndstop(): string { return this.data.selectedEndstop; }
+    public set selectedEndstop(val: string) { this.setDataVal('selectedEndstop', val); }
+
+}
+
+
 export class ValveCollection extends EqItemCollection<Valve> {
     constructor(data: any, name?: string) { super(data, name || "valves"); }
     public createItem(data: any): Valve { return new Valve(data); }
@@ -1764,6 +1785,9 @@ export class Valve extends EqItem {
 
     public get resetReason(): string { return this.data.resetReason; }
     public set resetReason(val: string) { this.setDataVal('resetReason', val); }
+    public get portId(): number { return this.data.portId; }
+    public set portId(val: number) { this.setDataVal('portId', val); }
+    public get circuits(): ValveCircuitCollection { return new ValveCircuitCollection(this.data, "circuits"); }
 }
 export class HeaterCollection extends EqItemCollection<Heater> {
     constructor(data: any, name?: string) { super(data, name || "heaters"); }

@@ -39,20 +39,53 @@ export class NixieValveCollection extends NixieEquipmentCollection<NixieValve> {
         // By the time we get here we know that we are in control and this is a Nixie valve.
         try {
             let c: NixieValve = this.find(elem => elem.id === valve.id) as NixieValve;
+
             if (typeof c === 'undefined') {
                 valve.master = 1;
                 c = new NixieValve(this.controlPanel, valve);
+                data.id = valve.id;
                 this.push(c);
                 await c.setValveAsync(data);
                 logger.info(`A valve was not found for id #${valve.id} creating valve`);
             }
             else {
                 valve.master = 1;
-                c.valve.master = 1;
+                // I think the below line is causing all my problems
+                //c.valve.master = 1;
                 await c.setValveAsync(data);
             }
         }
         catch (err) { logger.error(`setValveAsync: ${err.message}`); return Promise.reject(err); }
+    }
+    public async searchValveAsync(): Promise<Valve[]>  {
+        // By the time we get here we know that we are in control and this is a Nixie valve.
+        try {
+            if (conn.isPortEnabled( 0)) {
+                let out = Outbound.create({
+                    portId: 0,
+                    protocol: Protocol.IntelliValve,
+                    dest: 0xF,
+                    action: 0x12,
+                    payload: [1],
+                    retries: 10, // IntelliCenter tries 4 times to get a response.
+                    response: Response.create({ protocol: Protocol.IntelliValve, action: 0x52 }),
+                    onAbort: () => { logger.error(`Communication aborted for find Valve`); },
+                });
+                try {
+                    await out.sendAsync();
+
+                    //return Promise.resolve(this.toString());
+                }
+                catch (err) {
+                    logger.error(`Communication error when searching valves: ${err.message}`);
+                    return Promise.reject(err);
+                }
+            }
+        }
+        catch (err) {
+            logger.error(`setValveAsync: ${err.message}`);
+            return Promise.reject(err);
+        }
     }
     public async initAsync(valves: ValveCollection) {
         try {
@@ -74,6 +107,7 @@ export class NixieValveCollection extends NixieEquipmentCollection<NixieValve> {
         try {
             for (let i = this.length - 1; i >= 0; i--) {
                 try {
+                    logger.info(`Closing Nixie Valve: ${this[i].id}`);
                     await this[i].closeAsync();
                     this.splice(i, 1);
                 } catch (err) { logger.error(`Error stopping Nixie Valve ${err}`); }
@@ -133,6 +167,19 @@ export class NixieValve extends NixieEquipment {
     public async setValveAsync(data: any) {
         try {
             let valve = this.valve;
+
+            /*if (typeof type.maxCircuits !== 'undefined' && type.maxCircuits > 0 && typeof data.circuits !== 'undefined') { // This pump type supports circuits
+                for (let i = 1; i <= data.circuits.length && i <= type.maxCircuits; i++) {
+                    let c = data.circuits[i - 1];
+                    c.id = i;
+                    let circuit = parseInt(c.circuit, 10);
+                    let cd = this.pump.circuits.find(elem => elem.circuit === circuit);
+                    let speed = parseInt(c.speed, 10);
+                    let relay = parseInt(c.relay, 10);
+                    let flow = parseInt(c.flow, 10);
+                    let units = typeof c.units !== 'undefined' ? sys.board.valueMaps.pumpUnits.encode(c.units) : undefined;
+
+                    }*/
         }
         catch (err) { logger.error(`Nixie setValveAsync: ${err.message}`); return Promise.reject(err); }
     }
@@ -147,13 +194,14 @@ export class NixieValve extends NixieEquipment {
             this.closing = false;
             this._suspendPolling = 0;
             // During startup it won't be uncommon for the comms to be out.  This will be because the body will be off so don't stress it so much.
-            logger.debug(`Begin sending chlorinator messages ${this.valve.name}`);
+            logger.debug(`Begin sending Valve messages ${this.valve.name}`);
             this.pollEquipmentAsync();
         } catch (err) { logger.error(`Error initializing ${this.valve.name} : ${err.message}`); }
     }
 
     public async pollEquipmentAsync() {
         let self = this;
+        logger.silly(`Polling Valve: ${this.valve.name}, suspendPolling: ${this.suspendPolling}, state.mode: ${state.mode}, this.pollingInterval: ${this.pollingInterval}`)
         try {
             if (typeof this._pollTimer !== 'undefined' || this._pollTimer) {
                 clearTimeout(this._pollTimer);
@@ -163,6 +211,7 @@ export class NixieValve extends NixieEquipment {
                 try {
                     this.suspendPolling = true;
                     if (state.mode === 0) {
+                        logger.silly(`Taking Control: ${this.valve.name}, suspendPolling: ${this.suspendPolling}, state.mode: ${state.mode}, this.pollingInterval: ${this.pollingInterval}`)
                         if (!this.closing) await this.takeControlAsync();
                         if (!this.closing) await setTimeout(300);
                         /*if (!this.closing) await this.setOutputAsync();
@@ -170,16 +219,24 @@ export class NixieValve extends NixieEquipment {
                         if (!this.closing) await this.getModelAsync();*/
                     }
                 } catch (err) {
-                    // We only display an error here if the body is on.  The chlorinator should be powered down when it is not.
-                    logger.error(`Chlorinator ${this.valve.name} comms failure: ${err.message}`);
+                    logger.error(`Valve ${this.valve.name} comms failure: ${err.message}`);
                 }
-                finally { this.suspendPolling = false; }
+                finally {
+                    this.suspendPolling = false;
+                    logger.silly(`Polling Valve1: ${this.valve.name}, suspendPolling: ${this.suspendPolling}, state.mode: ${state.mode}, this.pollingInterval: ${this.pollingInterval}`);
+                }
             }
 
             let success = false;
         }
-        catch (err) { logger.error(`Nixie Error polling valve - ${err}`); }
-        finally { this._pollTimer = setTimeoutSync(async () => await self.pollEquipmentAsync(), this.pollingInterval || 10000); }
+        catch (err) {
+            logger.error(`Nixie Error polling valve - ${err}`);
+        }
+        finally {
+            this.suspendPolling = false;
+            logger.silly(`Polling Valve2: ${this.valve.name}, suspendPolling: ${this.suspendPolling}, state.mode: ${state.mode}, this.pollingInterval: ${this.pollingInterval}`);
+            this._pollTimer = setTimeoutSync(async () => await self.pollEquipmentAsync(), this.pollingInterval || 10000);
+        }
     }
     private async checkHardwareStatusAsync(connectionId: string, deviceBinding: string) {
         try {
@@ -192,9 +249,9 @@ export class NixieValve extends NixieEquipment {
         //try {
         let vstate = state.valves.getItemById(this.valve.id, true);
 
-        if (conn.isPortEnabled(/*this.valve.portID ||*/ 0) && (vstate.fwType === "Eggys IVFW")) {
+        if (conn.isPortEnabled(this.valve.portId || 0) && (vstate.fwType === "Eggys IVFW")) {
             let out = Outbound.create({
-                portId: 0,
+                portId: this.valve.portId || 0,
                 protocol: Protocol.IntelliValve,
                 dest: this.valve.address,
                 action: 0x28,
@@ -205,6 +262,7 @@ export class NixieValve extends NixieEquipment {
             });
             out.appendPayloadByte(this.valve.endstop0Value);
             out.appendPayloadByte(this.valve.endstop24Value);
+            logger.silly(`Took Control of Valve Async1: ${vstate.name}`)
             try {
                 await out.sendAsync();
                 vstate.emitEquipmentChange();
@@ -240,6 +298,7 @@ export class NixieValve extends NixieEquipment {
                 this._pollTimer = undefined;
             }
             let vstate = state.valves.getItemById(this.valve.id);
+            logger.silly(`Closing Valve Async1: ${vstate.name}`)
             this.setValveStateAsync(vstate, false);
             vstate.emitEquipmentChange();
             await super.closeAsync();

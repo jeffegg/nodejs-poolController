@@ -43,16 +43,18 @@ export class IntelliValveStateMessage {
 
                 let uuid_array_1 = [msg.payload[0], msg.payload[1], msg.payload[2], msg.payload[3], msg.payload[4], msg.payload[5]];
 
-                logger.info(`VALVE_ENDSTOPS(${msg.action}) from valve ${msg.source}, with data: ${msg.payload}`);
-                logger.info(`Valve UUID:        ${uuid_array_1.toString()}`);
-                logger.info(`Endstop 0 Value:   ${endstop0Value.toString()}`);
-                logger.info(`Endstop 24 Value:  ${endstop24Value.toString()}`);
-                logger.info(`Selected Endstop:  ${selectedEndstop}`);
-                logger.info(`Current Position:  ${currentPosition.toString()}`);
-                logger.info(`Current Mode:      ${currentMode}`);
-
-
                 let valve1 = sys.valves.find(x => JSON.stringify(x.UUID) === JSON.stringify(uuid_array_1));
+                logger.silly(`VALVE_ENDSTOPS(${msg.action}) from valve ${msg.source}, with data: ${msg.payload}`);
+                logger.silly(`Valve UUID:        ${uuid_array_1.toString()}`);
+                logger.silly(`Endstop 0 Value:   ${endstop0Value.toString()}`);
+                logger.silly(`Endstop 24 Value:  ${endstop24Value.toString()}`);
+                logger.silly(`Selected Endstop:  ${selectedEndstop}`);
+                logger.silly(`Current Position:  ${currentPosition.toString()}`);
+                logger.silly(`Current Mode:      ${currentMode}`);
+                logger.silly(`Valve ID:          ${valve1.id}`);
+                logger.silly(`Valve Address:     ${valve1.address}`);
+                logger.silly(`VALVE UUID Mode:   ${valve1.UUID}`);
+                logger.silly(`VALVE UUID Active: ${valve1.isActive}`);
 
                 if (typeof valve1 === 'undefined') {
                     logger.info(`UUID not found: ${uuid_array_1.toString()}`);
@@ -142,10 +144,10 @@ export class IntelliValveStateMessage {
                     logger.info(`Last Status: ${status.toString(16)}`)
                 }
 
-                let valve = sys.valves.find(x => JSON.stringify(x.UUID) === JSON.stringify(uuid_array));
+                let valve = sys.valves.find((x) => JSON.stringify(x.UUID) === JSON.stringify(uuid_array));
                 if (typeof valve === 'undefined') {
                     logger.info(`Adding new valve with UUID: ${uuid_array.toString()}`);
-                    let id = sys.valves.filter(elem => elem.master === 0).getMaxId(false, 0) + 1;
+                    let id = sys.valves.getMaxId(false, 0) + 1;
                     valve = sys.valves.getItemById(id, true);
                     valve.id = id;
                     valve.name = fwType == "Eggys IVFW" ? `iValve ${msg.source - 160}`: `Valve ${id}`;
@@ -230,7 +232,7 @@ export class IntelliValveStateMessage {
                 svalve.fwBranch = valve.fwBranch ;
 
                 let out = Outbound.create({
-                                portId: 0,
+                                portId: valve.portId || 0,
                                 protocol: Protocol.IntelliValve,
                                 dest: msg.source,
                                 action: 0x2A,

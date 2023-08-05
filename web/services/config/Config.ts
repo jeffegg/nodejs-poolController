@@ -173,7 +173,8 @@ export class ConfigRoute {
                     valveTypes: sys.board.valueMaps.valveTypes.toArray(),
                     circuits: sys.board.circuits.getCircuitReferences(true, true, true),
                     valves: sys.valves.get(),
-                    servers: await sys.ncp.getREMServers()
+                    servers: await sys.ncp.getREMServers(),
+                    rs485ports: await conn.listInstalledPorts()
                 };
                 opts.circuits.unshift({ id: 256, name: 'Unassigned', type: 0, equipmentType: 'circuit' });
                 return res.status(200).send(opts);
@@ -479,6 +480,12 @@ export class ConfigRoute {
             catch (err) { next(err); }
         });
 
+        app.get('/config/valve/search', async (req, res, next) => {
+            try {
+                await sys.board.valves.searchValveAsync();
+                return res.status(200).send(null);
+            } catch (err) { next(err); }
+        });
         app.put('/config/valve', async (req, res, next) => {
             // Update a valve.
             try {
