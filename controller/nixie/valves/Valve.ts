@@ -57,34 +57,62 @@ export class NixieValveCollection extends NixieEquipmentCollection<NixieValve> {
         }
         catch (err) { logger.error(`setValveAsync: ${err.message}`); return Promise.reject(err); }
     }
-    public async searchValveAsync(): Promise<Valve[]>  {
+    public async searchValveAsync(obj: number){
         // By the time we get here we know that we are in control and this is a Nixie valve.
         try {
-            if (conn.isPortEnabled( 0)) {
-                let out = Outbound.create({
-                    portId: 0,
-                    protocol: Protocol.IntelliValve,
-                    dest: 0xF,
-                    action: 0x12,
-                    payload: [1],
-                    retries: 10, // IntelliCenter tries 4 times to get a response.
-                    response: Response.create({ protocol: Protocol.IntelliValve, action: 0x52 }),
-                    onAbort: () => { logger.error(`Communication aborted for find Valve`); },
-                });
-                try {
-                    await out.sendAsync();
+            if (obj == -1) {
+                if (conn.isPortEnabled(0)) {
+                    let out = Outbound.create({
+                        portId: 0,
+                        protocol: Protocol.IntelliValve,
+                        dest: 0xF,
+                        action: 0x12,
+                        payload: [1],
+                        retries: 10, // IntelliCenter tries 4 times to get a response.
+                        response: Response.create({protocol: Protocol.IntelliValve, action: 0x52}),
+                        onAbort: () => {
+                            logger.error(`Communication aborted for find Valve`);
+                        },
+                    });
+                    try {
+                        await out.sendAsync();
 
-                    //return Promise.resolve(this.toString());
+                        //return Promise.resolve(this.toString());
+                    } catch (err) {
+                        logger.error(`Communication error when searching valves: ${err.message}`);
+                    }
                 }
-                catch (err) {
-                    logger.error(`Communication error when searching valves: ${err.message}`);
-                    return Promise.reject(err);
+            }
+            else {
+                let c: NixieValve = this.find(elem => elem.id === obj) as NixieValve;
+                if (conn.isPortEnabled(c.valve.portId || 0) && (c.valve.fwType === "Eggys IVFW")) {
+                    let out = Outbound.create({
+                        portId: c.valve.portId || 0,
+                        protocol: Protocol.IntelliValve,
+                        dest: c.valve.address,
+                        action: 0x10,
+                        payload: c.valve.UUID,
+                        response: false,
+                        retries: 10,
+                        onComplete: (err, _) => {
+                            if (err) {
+                                logger.error(`Intellivalve VALVE_IDENTIFY_UUID failed for ${c.valve.name}: ${err.message}`);
+                            }
+                        },
+                        onAbort: () => {
+                            logger.error(`Communication aborted with Valve ${c.valve.name}`);
+                        },
+                    });
+                    try {
+                        await out.sendAsync();
+                    } catch (err) {
+                        logger.error(`Communication error when IDing valve: ${err.message}`);
+                    }
                 }
             }
         }
         catch (err) {
-            logger.error(`setValveAsync: ${err.message}`);
-            return Promise.reject(err);
+            logger.error(`searchValveAsync: ${err.message}`);
         }
     }
     public async initAsync(valves: ValveCollection) {

@@ -480,10 +480,10 @@ export class ConfigRoute {
             catch (err) { next(err); }
         });
 
-        app.get('/config/valve/search', async (req, res, next) => {
+        app.put('/config/valve/search', async (req, res, next) => {
             try {
-                await sys.board.valves.searchValveAsync();
-                return res.status(200).send(null);
+                await sys.board.valves.searchValveAsync(req.body);
+                return res.status(200).send('OK');
             } catch (err) { next(err); }
         });
         app.put('/config/valve', async (req, res, next) => {
