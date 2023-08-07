@@ -60,7 +60,7 @@ export class IntelliValveStateMessage {
                     logger.info(`UUID not found: ${uuid_array_1.toString()}`);
                 } else {
                     let svalve1 = state.valves.getItemById(valve1.id, true);
-                    logger.info(`UUID found: ${uuid_array_1.toString()}`);
+                    logger.silly(`UUID found: ${uuid_array_1.toString()}`);
                     valve1.endstop0Value = endstop0Value;
                     valve1.endstop24Value = endstop24Value;
                     valve1.selectedEndstop = selectedEndstop;
@@ -94,8 +94,8 @@ export class IntelliValveStateMessage {
                 {
                     if ((msg.payload[0] == 0x0) && (msg.payload[1] == 0x80)) {
                         uuid_array = [msg.payload[2], msg.payload[3], msg.payload[4], msg.payload[5], msg.payload[6], msg.payload[7]];
-                        logger.info(`Hail Seen(${msg.action}) from valve with Pentair FW: ${msg.source}, with data: ${msg.payload}`);
-                        logger.info(`Valve UUID: ${uuid_array.toString()}`);
+                        logger.silly(`Hail Seen(${msg.action}) from valve with Pentair FW: ${msg.source}, with data: ${msg.payload}`);
+                        logger.silly(`Valve UUID: ${uuid_array.toString()}`);
                         gitHash = 0xFFFF
                         fwDate = 0xFFFF
                         did = 0xFFFF
@@ -158,7 +158,7 @@ export class IntelliValveStateMessage {
                 }
                 else
                 {
-                    logger.info(`Found valve with UUID: ${uuid_array.toString()} and ID ${valve.id}`);
+                    logger.silly(`Found valve with UUID: ${uuid_array.toString()} and ID ${valve.id}`);
                 }
                 valve.address = msg.source;
                 valve.fwVersion = gitHash;
