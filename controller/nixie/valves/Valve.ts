@@ -173,11 +173,44 @@ export class NixieValve extends NixieEquipment {
     public set suspendPolling(val: boolean) { this._suspendPolling = Math.max(0, this._suspendPolling + (val ? 1 : -1)); }
     public async setValveStateAsync(vstate: ValveState, isDiverted: boolean) {
         try {
+            //logger.verbose(`Nixie1: Set valve ${vstate.id}-${vstate.name} to ${isDiverted}`);
             // Here we go we need to set the valve state.
             if (vstate.isDiverted !== isDiverted) {
                 logger.verbose(`Nixie: Set valve ${vstate.id}-${vstate.name} to ${isDiverted}`);
             }
             if (utils.isNullOrEmpty(this.valve.connectionId) || utils.isNullOrEmpty(this.valve.deviceBinding)) {
+                if (this.valve.type === 1) {
+                    let new_endstop = isDiverted? 1: 0;
+                    let current_endstop = isDiverted? "Endstop 24" : "Endstop 0";
+                    if (conn.isPortEnabled(this.valve.portId || 0) && (vstate.fwType === "Eggys IVFW") && (vstate.selectedEndstop !== current_endstop)) {
+                        logger.verbose(`Nixie: Intellivalve set endstop ${vstate.id}-${vstate.name} to ${new_endstop}`);
+                        let out = Outbound.create({
+                            portId: this.valve.portId || 0,
+                            protocol: Protocol.IntelliValve,
+                            dest: this.valve.address,
+                            action: 0x28,
+                            payload: this.valve.UUID,
+                            retries: 10, // IntelliCenter tries 4 times to get a response.
+                            response: Response.create({protocol: Protocol.IntelliValve, action: 0x2B}),
+                            onAbort: () => {
+                                logger.error(`Communication aborted with Valve ${this.valve.name}`);
+                            },
+                        });
+                        out.appendPayloadByte(this.valve.endstop0Value);
+                        out.appendPayloadByte(this.valve.endstop24Value);
+                        out.appendPayloadByte(new_endstop);
+                        logger.silly(`Took Control of Valve Async3: ${vstate.name}`)
+                        try {
+                            await out.sendAsync();
+                            vstate.emitEquipmentChange();
+                        } catch (err) {
+                            logger.error(`Communication error with Valve ${this.valve.name} : ${err.message}`);
+
+                            //vstate.status = 128;
+                        }
+                    }
+
+                }
                 vstate.isDiverted = isDiverted;
                 return new InterfaceServerResponse(200, 'Success');
             }

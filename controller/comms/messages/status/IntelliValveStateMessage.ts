@@ -153,6 +153,7 @@ export class IntelliValveStateMessage {
                     valve.name = fwType == "Eggys IVFW" ? `iValve ${msg.source - 160}`: `Valve ${id}`;
                     valve.UUID = uuid_array;
                     valve.type = 1;
+                    // @TODO I bet this should be False so we dont set to active till setup fully
                     valve.isActive = true;
                     valve.master = 0;
                 }
