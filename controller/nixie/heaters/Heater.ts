@@ -287,11 +287,15 @@ export class NixieSolarHeater extends NixieHeaterBase {
             if (typeof this._lastState === 'undefined' || target || this._lastState !== target) {
                 if (utils.isNullOrEmpty(this.heater.connectionId) || utils.isNullOrEmpty(this.heater.deviceBinding)) {
                     this._lastState = hstate.isOn = target;
+                    hstate.isCooling = target && isCooling;
                 }
                 else {
                     let res = await NixieEquipment.putDeviceService(this.heater.connectionId, `/state/device/${this.heater.deviceBinding}`,
                         { isOn: target, latch: target ? 10000 : undefined });
-                    if (res.status.code === 200) this._lastState = hstate.isOn = target;
+                    if (res.status.code === 200) {
+                        this._lastState = hstate.isOn = target;
+                        hstate.isCooling = target && isCooling;
+                    }
                     else logger.error(`Nixie Error setting heater state: ${res.status.code} -${res.status.message} ${res.error.message}`);
                 }
                 if (target) {

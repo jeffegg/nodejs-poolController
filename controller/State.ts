@@ -1088,8 +1088,13 @@ export class ScheduleStateCollection extends EqStateCollection<ScheduleState> {
         for (let i = 0; i < this.length; i++) {
             let ssched = this.getItemByIndex(i);
             let st = ssched.scheduleTime;
+            let sched = sys.schedules.getItemById(ssched.id);
+            if (!sched.isActive || ssched.disabled) {
+                continue;
+            }
             st.calcSchedule(state.time, sys.schedules.getItemById(ssched.id));
-            if (ssched.isOn || st.shouldBeOn) activeScheds.push(ssched);
+            if (typeof st.startTime === 'undefined') continue;
+            if (ssched.isOn || st.shouldBeOn || st.startTime.getTime() > new Date().getTime()) activeScheds.push(ssched);
         }
         return activeScheds;
     }
@@ -1126,9 +1131,9 @@ export class ScheduleTime extends ChildEqState {
             let sod = ts.clone().startOfDay();
             let ysod = ts.clone().addHours(-24).startOfDay();
             let nsod = ts.clone().addHours(-24).startOfDay();
-            let ytimes: { startTime: Date, endTime: Date } = { startTime: null, endTime: null };
-            let ttimes: { startTime: Date, endTime: Date } = { startTime: null, endTime: null };
-            let ntimes: { startTime: Date, endTime: Date } = { startTime: null, endTime: null };
+            let ytimes: { startTime: Date, endTime: Date } = { startTime: null, endTime: null };  // Yesterday
+            let ttimes: { startTime: Date, endTime: Date } = { startTime: null, endTime: null };  // Today
+            let ntimes: { startTime: Date, endTime: Date } = { startTime: null, endTime: null };  // Tomorrow
             let tt = sys.board.valueMaps.scheduleTimeTypes.transform(sched.startTimeType);
             // Add the range for today and yesterday.
             switch (tt.name) {
@@ -1180,6 +1185,8 @@ export class ScheduleTime extends ChildEqState {
             ttimes.endTime.setSeconds(59, 999); // Set the end time to the end of the minute.
             ytimes.startTime.setSeconds(0, 0);
             ytimes.endTime.setSeconds(59, 999);
+            ntimes.startTime.setSeconds(0, 0);
+            ntimes.endTime.setSeconds(59, 999);
             // Now check the dow for each range.  If the start time for the dow matches then include it.  If not then do not.
             let schedDays = sys.board.valueMaps.scheduleDays.toArray();
             let fnInRange = (time, times) => {
@@ -1209,7 +1216,8 @@ export class ScheduleTime extends ChildEqState {
                     return times;
                 }
             }
-            // Then check if we are running today
+            // Then check if we are running today.  If we have already run then get net next run
+            // time.
             if (tm <= ttimes.startTime.getTime()) {
                 let sd = schedDays.find(elem => elem.dow === ttimes.startTime.getDay());
                 if (typeof sd !== 'undefined' && (sched.scheduleDays & sd.bitval) !== 0) {
@@ -1237,18 +1245,28 @@ export class ScheduleTime extends ChildEqState {
         try {
             let sod = currentTime.clone().startOfDay();
 
-            let dtCalc = typeof this.calculatedDate !== 'undefined' && typeof this.calculatedDate.getTime === 'function' ? new Date(this.calculatedDate.getTime()).setHours(0, 0, 0, 0) : new Date(1970, 0, 1, 0, 0);
-
-            // When a schedule is changed the calculated flag should be cleared.  This will
-            // force the calculation to take place.
-            if (this.calculated && sod.getTime() === dtCalc) return this.shouldBeOn;
+            // There are 3 conditions where the schdedule will be recalculated.  The first
+            // 1. The calculated flag is false
+            // 2. The calculated flag is true and the calculated date < the current start of day
+            // 3. Regardless of the calculated date the current end time has passed and the start time is
+            // from a prior date.  This will happen when the schedule is complete and we need to calculate the
+            // next run time.
+            let dtCalc = typeof this.calculatedDate !== 'undefined' && typeof this.calculatedDate.getTime === 'function' ? new Date(this.calculatedDate.getTime()).setHours(0, 0, 0, 0) : new Date(1970, 0, 1, 0, 0).getTime();
+            let recalc = !this.calculated;
+            if (!recalc && sod.getTime() !== dtCalc) recalc = true;
+            if (!recalc && (this.endTime.getTime() < new Date().getTime() && this.startTime.getTime() < dtCalc)) {
+                recalc = true;
+                logger.info(`Recalculating expired schedule ${sched.id}`);
+            }
+            if (!recalc) return this.shouldBeOn;
+            //if (this.calculated && sod.getTime() === dtCalc) return this.shouldBeOn;
             this.calculatedDate = new Date(new Date().setHours(0, 0, 0, 0));
             if (sched.isActive === false || sched.disabled) return false;
             let tt = sys.board.valueMaps.scheduleTimeTypes.transform(sched.startTimeType);
             // If this is a runonce schedule we need to check for the rundate
             let type = sys.board.valueMaps.scheduleTypes.transform(sched.scheduleType);
             let times = type.name === 'runonce' ? this.calcScheduleDate(new Timestamp(sched.startDate), sched) : this.calcScheduleDate(state.time.clone(), sched);
-            if (times.startTime) {
+            if (times.startTime && times.endTime.getTime() > currentTime.getTime()) {
                 // Check to see if it should be on.
                 this.startTime = times.startTime;
                 this.endTime = times.endTime;
@@ -1376,6 +1394,10 @@ export class ScheduleState extends EqState {
     public get manualPriorityActive(): boolean { return this.data.manualPriorityActive; }
     public set manualPriorityActive(val: boolean) { this.setDataVal('manualPriorityActive', val); }
     public get scheduleTime(): ScheduleTime { return new ScheduleTime(this.data, 'scheduleTime', this); }
+    public recalculate(force?: boolean) {
+        if (force === true) this.scheduleTime.calculated = false;
+        this.scheduleTime.calcSchedule(state.time, sys.schedules.getItemById(this.id));
+    }
     public getExtended() {
         let sched = this.get(true); // Always operate on a copy.
         //if (typeof this.circuit !== 'undefined')

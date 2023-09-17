@@ -26,6 +26,7 @@ import { state, ChlorinatorState, LightGroupState, VirtualCircuitState, ICircuit
 import { utils } from '../../controller/Constants';
 import { InvalidEquipmentIdError, InvalidEquipmentDataError, EquipmentNotFoundError, MessageError, InvalidOperationError } from '../Errors';
 import { ncp } from '../nixie/Nixie';
+import { Timestamp } from "../Constants"
 export class IntelliCenterBoard extends SystemBoard {
     public needsConfigChanges: boolean = false;
     constructor(system: PoolSystem) {
@@ -3119,6 +3120,7 @@ class IntelliCenterBodyCommands extends BodyCommands {
     }
 }
 class IntelliCenterScheduleCommands extends ScheduleCommands {
+    _lastScheduleCheck: number = 0;
     public async setScheduleAsync(data: any): Promise<Schedule> {
         if (typeof data.id !== 'undefined') {
             let id = typeof data.id === 'undefined' ? -1 : parseInt(data.id, 10);
@@ -3224,6 +3226,38 @@ class IntelliCenterScheduleCommands extends ScheduleCommands {
         }
         else
             return Promise.reject(new InvalidEquipmentIdError('No schedule information provided', undefined, 'Schedule'));
+    }
+    public syncScheduleStates() {
+        // This is triggered from the 204 message in IntelliCenter.  We will
+        // be checking to ensure it does not load the server so we only do this every 10 seconds.
+        if (this._lastScheduleCheck > new Date().getTime() - 10000) return;
+        try {
+            // The call below also calculates the schedule window either the current or next.
+            ncp.schedules.triggerSchedules();  // At this point we are not adding Nixie schedules to IntelliCenter but this will trigger
+            // the proper time windows if they exist.
+            // Check each running circuit/feature to see when it will be going off.
+            let scheds = state.schedules.getActiveSchedules();
+            let circs: { state: ICircuitState, endTime: number }[] = [];
+            for (let i = 0; i < scheds.length; i++) {
+                let ssched = scheds[i];
+                if (!ssched.isOn || ssched.disabled || !ssched.isActive) continue;
+                let c = circs.find(x => x.state.id === ssched.circuit);
+                if (typeof c === 'undefined') {
+                    let cstate = state.circuits.getInterfaceById(ssched.circuit);
+                    c = { state: cstate, endTime: ssched.scheduleTime.endTime.getTime() };
+                    circs.push;
+                }
+                if (c.endTime < ssched.scheduleTime.endTime.getTime()) c.endTime = ssched.scheduleTime.endTime.getTime();
+            }
+            for (let i = 0; i < circs.length; i++) {
+                let c = circs[i];
+                if (c.state.endTime.getTime() !== c.endTime) {
+                    c.state.endTime = new Timestamp(new Date(c.endTime));
+                    c.state.emitEquipmentChange();
+                }
+            }
+            this._lastScheduleCheck = new Date().getTime();
+        } catch (err) { logger.error(`Error synchronizing schedule states`); }
     }
     public async deleteScheduleAsync(data: any): Promise<Schedule> {
         if (typeof data.id !== 'undefined') {
