@@ -390,6 +390,10 @@ export class IntelliCenterBoard extends SystemBoard {
         for (let i = 0; i < sys.circuits.length; i++) {
             let c = sys.circuits.getItemByIndex(i);
             if (c.id <= 40) c.master = 0;
+            if (typeof sys.board.valueMaps.circuitFunctions.get(c.type).isLight) {
+                let s = state.circuits.getItemById(c.id);
+                if (s.action !== 0) s.action = 0;
+            }
         }
         for (let i = 0; i < sys.valves.length; i++) {
             let v = sys.valves.getItemByIndex(i);
@@ -2169,6 +2173,7 @@ class IntelliCenterCircuitCommands extends CircuitCommands {
             255, 255, 0, 0, 0, 0], // 30-35
             3);
 
+
         // Circuits are always contiguous so we don't have to worry about
         // them having a strange offset like features and groups. However, in
         // single body systems they start with 2.
@@ -2176,13 +2181,14 @@ class IntelliCenterCircuitCommands extends CircuitCommands {
             // We are using the index and setting the circuits based upon
             // the index.  This way it doesn't matter what the sort happens to
             // be and whether there are gaps in the ids or not.  The ordinal is the bit number.
-            let circuit = state.circuits.getItemByIndex(i);
-            let ordinal = circuit.id - 1;
+            let cstate = state.circuits.getItemByIndex(i);
+            let ordinal = cstate.id - 1;
+            if (ordinal >= 40) continue;
             let ndx = Math.floor(ordinal / 8);
             let byte = out.payload[ndx + 3];
             let bit = ordinal - (ndx * 8);
-            if (circuit.id === id) byte = isOn ? byte = byte | (1 << bit) : byte;
-            else if (circuit.isOn) byte = byte | (1 << bit);
+            if (cstate.id === id) byte = isOn ? byte = byte | (1 << bit) : byte;
+            else if (cstate.isOn) byte = byte | (1 << bit);
             out.payload[ndx + 3] = byte;
         }
         // Set the bits for the features.
@@ -2192,6 +2198,7 @@ class IntelliCenterCircuitCommands extends CircuitCommands {
             // be and whether there are gaps in the ids or not.  The ordinal is the bit number.
             let feature = state.features.getItemByIndex(i);
             let ordinal = feature.id - sys.board.equipmentIds.features.start;
+            if (ordinal >= 32) continue;
             let ndx = Math.floor(ordinal / 8);
             let byte = out.payload[ndx + 9];
             let bit = ordinal - (ndx * 8);
@@ -2203,6 +2210,7 @@ class IntelliCenterCircuitCommands extends CircuitCommands {
         for (let i = 0; i < state.data.circuitGroups.length; i++) {
             let group = state.circuitGroups.getItemByIndex(i);
             let ordinal = group.id - sys.board.equipmentIds.circuitGroups.start;
+            if (ordinal >= 16) continue;
             let ndx = Math.floor(ordinal / 8);
             let byte = out.payload[ndx + 13];
             let bit = ordinal - (ndx * 8);
@@ -2214,6 +2222,7 @@ class IntelliCenterCircuitCommands extends CircuitCommands {
         for (let i = 0; i < state.data.lightGroups.length; i++) {
             let group = state.lightGroups.getItemByIndex(i);
             let ordinal = group.id - sys.board.equipmentIds.circuitGroups.start;
+            if (ordinal >= 16) continue;
             let ndx = Math.floor(ordinal / 8);
             let byte = out.payload[ndx + 13];
             let bit = ordinal - (ndx * 8);
@@ -2249,6 +2258,7 @@ class IntelliCenterCircuitCommands extends CircuitCommands {
         for (let i = 0; i < state.data.schedules.length; i++) {
             let sched = state.schedules.getItemByIndex(i);
             let ordinal = sched.id - 1;
+            if (ordinal >= 100) continue;
             let ndx = Math.floor(ordinal / 8);
             let byte = out.payload[ndx + 15];
             let bit = ordinal - (ndx * 8);
@@ -2815,9 +2825,11 @@ class IntelliCenterBodyCommands extends BodyCommands {
         processing: boolean,
         bytes: number[],
         body1: { heatMode: number, heatSetpoint: number, coolSetpoint: number },
-        body2: { heatMode: number, heatSetpoint: number, coolSetpoint: number }
+        body2: { heatMode: number, heatSetpoint: number, coolSetpoint: number },
+        _processingStartTime?: number
     };
     private async queueBodyHeatSettings(bodyId?: number, byte?: number, data?: any): Promise<Boolean> {
+        logger.debug(`queueBodyHeatSettings: ${JSON.stringify(this.bodyHeatSettings)}`);  // remove this line if #848 is fixed
         if (typeof this.bodyHeatSettings === 'undefined') {
             let body1 = sys.bodies.getItemById(1);
             let body2 = sys.bodies.getItemById(2);
@@ -2826,9 +2838,18 @@ class IntelliCenterBodyCommands extends BodyCommands {
                 bytes: [],
                 body1: { heatMode: body1.heatMode || 1, heatSetpoint: body1.heatSetpoint || 78, coolSetpoint: body1.coolSetpoint || 100 },
                 body2: { heatMode: body2.heatMode || 1, heatSetpoint: body2.heatSetpoint || 78, coolSetpoint: body2.coolSetpoint || 100 }
-            }
+            };
         }
         let bhs = this.bodyHeatSettings;
+        
+        // Reset processing state if it's been stuck for too long (more than 10 seconds)
+        if (bhs.processing && bhs._processingStartTime && (Date.now() - bhs._processingStartTime > 10000)) {
+            logger.warn(`Resetting stuck bodyHeatSettings processing state after timeout`);
+            bhs.processing = false;
+            bhs.bytes = [];
+            delete bhs._processingStartTime;
+        }
+        
         if (typeof data !== 'undefined' && typeof bodyId !== 'undefined' && bodyId > 0) {
             let body = bodyId === 2 ? bhs.body2 : bhs.body1;
             if (!bhs.bytes.includes(byte) && byte) bhs.bytes.push(byte);
@@ -2838,6 +2859,7 @@ class IntelliCenterBodyCommands extends BodyCommands {
         }
         if (!bhs.processing && bhs.bytes.length > 0) {
             bhs.processing = true;
+            bhs._processingStartTime = Date.now();
             let byte2 = bhs.bytes.shift();
             let fnToByte = function (num) { return num < 0 ? Math.abs(num) | 0x80 : Math.abs(num) || 0; };
             let payload = [0, 0, byte2, 1,
@@ -2863,21 +2885,33 @@ class IntelliCenterBodyCommands extends BodyCommands {
                 retries: 2,
                 response: IntelliCenterBoard.getAckResponse(168)
             });
-            await out.sendAsync();
-            let body1 = sys.bodies.getItemById(1);
-            let sbody1 = state.temps.bodies.getItemById(1);
-            body1.heatMode = sbody1.heatMode = bhs.body1.heatMode;
-            body1.heatSetpoint = sbody1.heatSetpoint = bhs.body1.heatSetpoint;
-            body1.coolSetpoint = sbody1.coolSetpoint = bhs.body1.coolSetpoint;
-            if (sys.equipment.dual || sys.equipment.shared) {
-                let body2 = sys.bodies.getItemById(2);
-                let sbody2 = state.temps.bodies.getItemById(2);
-                body2.heatMode = sbody2.heatMode = bhs.body2.heatMode;
-                body2.heatSetpoint = sbody2.heatSetpoint = bhs.body2.heatSetpoint;
-                body2.coolSetpoint = sbody2.coolSetpoint = bhs.body2.coolSetpoint;
+            try {
+                await out.sendAsync();
+                let body1 = sys.bodies.getItemById(1);
+                let sbody1 = state.temps.bodies.getItemById(1);
+                body1.heatMode = sbody1.heatMode = bhs.body1.heatMode;
+                body1.heatSetpoint = sbody1.heatSetpoint = bhs.body1.heatSetpoint;
+                body1.coolSetpoint = sbody1.coolSetpoint = bhs.body1.coolSetpoint;
+                if (sys.equipment.dual || sys.equipment.shared) {
+                    let body2 = sys.bodies.getItemById(2);
+                    let sbody2 = state.temps.bodies.getItemById(2);
+                    body2.heatMode = sbody2.heatMode = bhs.body2.heatMode;
+                    body2.heatSetpoint = sbody2.heatSetpoint = bhs.body2.heatSetpoint;
+                    body2.coolSetpoint = sbody2.coolSetpoint = bhs.body2.coolSetpoint;
+                }
+                state.emitEquipmentChanges();
+            } catch (err) {
+                logger.error(`Error in queueBodyHeatSettings: ${err.message}`);
+                bhs.processing = false;
+                bhs.bytes = [];
+                delete bhs._processingStartTime;
+                throw (err);
             }
-            bhs.processing = false;
-            state.emitEquipmentChanges();
+            finally {
+                bhs.processing = false;
+                bhs.bytes = [];
+                delete bhs._processingStartTime;
+            }
             return true;
         }
         else {
@@ -2886,10 +2920,16 @@ class IntelliCenterBodyCommands extends BodyCommands {
                 setTimeout(async () => {
                     try {
                         await this.queueBodyHeatSettings();
-                    } catch (err) { logger.error(`Error sending queued body setpoint message: ${err.message}`); }
+                    } catch (err) {
+                        logger.error(`Error sending queued body setpoint message: ${err.message}`);
+                        throw (err);
+                    }
                 }, 3000);
             }
-            else bhs.processing = false;
+            else {
+                bhs.processing = false;
+                delete bhs._processingStartTime;
+            }
             return true;
         }
     }

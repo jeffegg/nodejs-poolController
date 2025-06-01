@@ -582,7 +582,7 @@ export class byteValueMaps {
     public valveModes: byteValueMap = new byteValueMap([
         [0, { name: 'off', desc: 'Off' }],
         [1, { name: 'pool', desc: 'Pool' }],
-        [2, { name: 'spa', dest: 'Spa' }],
+        [2, { name: 'spa', desc: 'Spa' }],
         [3, { name: 'spillway', desc: 'Spillway' }],
         [4, { name: 'spadrain', desc: 'Spa Drain' }]
     ]);
@@ -961,10 +961,12 @@ export class SystemBoard {
             await sys.board.circuits.checkEggTimerExpirationAsync();
             state.emitControllerChange();
             state.emitEquipmentChanges();
-        } catch (err) { state.status = 255; logger.error(`Error performing processStatusAsync ${err.message}`); }
-        finally {
+            // RSG 4.3.24 - suspendStatus(false) should not be in the finally because it would decrement the _statusCheckRef 
+            // when it should be the job of the calling function (eg setCircuitStateAsync)
             this.suspendStatus(false);
-            if (this.statusInterval > 0) this._statusTimer = setTimeoutSync(async () => await self.processStatusAsync(), this.statusInterval);
+        } catch (err) { this.suspendStatus(false); state.status = 255; logger.error(`Error performing processStatusAsync ${err.message}`); }
+        finally {
+            if (this._statusCheckRef === 0) this._statusTimer = setTimeoutSync(async () => await self.processStatusAsync(), this.statusInterval);
         }
     }
     public async syncEquipmentItems() {
@@ -1760,6 +1762,7 @@ export class BodyCommands extends BoardCommands {
         let bdy = sys.bodies.getItemById(body.id);
         let bstate = state.temps.bodies.getItemById(body.id);
         bdy.heatMode = bstate.heatMode = mode;
+        sys.board.heaters.clearPrevHeaterOffTemp();
         sys.board.heaters.syncHeaterStates();
         state.emitEquipmentChanges();
         return Promise.resolve(bstate);
@@ -1768,6 +1771,7 @@ export class BodyCommands extends BoardCommands {
         let bdy = sys.bodies.getItemById(body.id);
         let bstate = state.temps.bodies.getItemById(body.id);
         bdy.setPoint = bstate.setPoint = setPoint;
+        sys.board.heaters.clearPrevHeaterOffTemp();
         state.emitEquipmentChanges();
         sys.board.heaters.syncHeaterStates();
         return Promise.resolve(bstate);
@@ -1912,6 +1916,27 @@ export class BodyCommands extends BoardCommands {
                     return state.temps.bodies.getItemById(1).isOn;
         }
         return false;
+    }
+    public getActiveBody(bodyCode: number): number {
+        let assoc = sys.board.valueMaps.bodies.transform(bodyCode);
+        switch (assoc.name) {
+            case 'body1':
+            case 'pool':
+                return 1;
+            case 'body2':
+            case 'spa':
+                return 2;
+            case 'body3':
+                return 3;
+            case 'body4':
+                return 4;
+            case 'poolspa':
+                if (sys.equipment.shared && sys.equipment.maxBodies >= 2) {
+                    return state.temps.bodies.getItemById(2).isOn ? 2 : 1;
+                }
+                else return 1; // Always default to pool.
+        }
+        return 0;
     }
 }
 export class PumpCommands extends BoardCommands {
@@ -3606,7 +3631,7 @@ export class ScheduleCommands extends BoardCommands {
         if (heatSetpoint < 0 || heatSetpoint > 104) return Promise.reject(new InvalidEquipmentDataError(`Invalid heat setpoint: ${heatSetpoint}`, 'Schedule', heatSetpoint));
         if (sys.board.circuits.getCircuitReferences(true, true, false, true).find(elem => elem.id === circuit) === undefined)
             return Promise.reject(new InvalidEquipmentDataError(`Invalid circuit reference: ${circuit}`, 'Schedule', circuit));
-        if (schedType === 128 && schedDays === 0) return Promise.reject(new InvalidEquipmentDataError(`Invalid schedule days: ${schedDays}. You must supply days that the schedule is to run.`, 'Schedule', schedDays));
+        if (schedType === 128 && schedDays === 0) return Promise.reject(new InvalidEquipmentDataError(`Invalid schedule days: ${schedDays}. You must supply days that the schedule is to run.`, 'Schedule', schedDays)); // rsg 2024.11.22 - some controllers allow no days.
 
         // If we made it to here we are valid and the schedula and it state should exist.
         sched = sys.schedules.getItemById(id, true);
@@ -4132,6 +4157,16 @@ export class HeaterCommands extends BoardCommands {
             }
         }
     }
+    public clearPrevHeaterOffTemp() {  // #925
+        for (let i = 0; i < state.heaters.length; i++) {
+            let heater = state.heaters.getItemByIndex(i);
+            let htype = sys.board.valueMaps.heaterTypes.transform(heater.type);
+            // only setting this for solar now; expand it to other heater types if applicable  #925
+            if (htype.name === 'solar'){
+                heater.prevHeaterOffTemp = undefined;
+            }
+        }
+    }
     // This updates the heater states based upon the installed heaters.  This is true for heaters that are tied to the OCP
     // and those that are not.
     public syncHeaterStates() {
@@ -4201,20 +4236,56 @@ export class HeaterCommands extends BoardCommands {
                                 switch (htype.name) {
                                     case 'solar':
                                         if (mode === 'solar' || mode === 'solarpref') {
-                                            // Measure up against start and stop temp deltas for effective solar heating.
-                                            if (body.temp < cfgBody.heatSetpoint &&
-                                                state.temps.solar > body.temp + (hstate.isOn ? heater.stopTempDelta : heater.startTempDelta)) {
+                                            /*
+                                                From the manual:
+                                                Screen (3/3): Solar temperature differential start up and run settings.
+                                                Start: Set the temperature differential to start heating from 3° to 9°. For example, if
+                                                “Start” is set to 3°, this ensures that the temperature has to deviate by 3° at least to the
+                                                specified set point temperature (in the Heat menu, on page 25) before it switches on.
+                                                Once the solar comes on it will start converging as it is heating. This ensures that it
+                                                will not continually be switching on and off.
+                                                Run: Set the temperature differential to stop heating from 2° to 5°. This setting sets
+                                                how close to the target set point temperature to switch off solar heat.
+                                            */
+                                            // RSG 04.15.2024 - Updates to heater logic for start/stop deltas.  #925
+                                            // 1.  For all heating cases in order for the heater to turn on, the solar temp > water temp.
+                                            // 2.  If the water temp is below the set point, we want to turn on the heater
+                                            // 3.  But only if the prevHeaterOffTemp - water temp > start temp delta
+                                            // 4.  Also only if there is enough heat ('run') to make it worthwhile
+                                            // 5.  The heater should run until it reaches the set point + stop delta
+                                            // 6.  When the heater turns off, note the water temp ("prevHeaterOffTemp").  This will only live in the application, not persisted.
+                                            let hState: HeaterState = 
+                                            state.heaters.getItemById(heater.id);
+                                            if (state.temps.solar > body.temp // 1
+                                                && body.temp < cfgBody.heatSetpoint // 2
+                                                && (typeof hState.prevHeaterOffTemp === 'undefined' || ((hState.prevHeaterOffTemp - body.temp) > heater.startTempDelta)) // 3
+                                                && (state.temps.solar - body.temp) > heater.stopTempDelta // 4
+                                                && body.temp < cfgBody.heatSetpoint // 5
+                                            ) {
+                                                // if (((hstate.isOn && body.temp < cfgBody.heatSetpoint + heater.stopTempDelta) || (!hstate.isOn && body.temp > cfgBody.heatSetpoint - heater.startTempDelta)) 
+                                                //     && state.temps.solar > body.temp ) {
                                                 isOn = true;
                                                 body.heatStatus = sys.board.valueMaps.heatStatus.getValue('solar');
                                                 isHeating = true;
                                             }
-                                            else if (heater.coolingEnabled && body.temp > cfgBody.coolSetpoint && state.heliotrope.isNight &&
-                                                state.temps.solar < body.temp - (hstate.isOn ? heater.stopTempDelta : heater.startTempDelta)) {
+                                            // reverse logic from heating states
+                                            else if (heater.coolingEnabled
+                                                && state.heliotrope.isNight
+                                                && state.temps.solar < body.temp // 1
+                                                && body.temp > cfgBody.coolSetpoint // 2
+                                                && (typeof hState.prevHeaterOffTemp === 'undefined' || ((hState.prevHeaterOffTemp - body.temp) < heater.startTempDelta)) // 3
+                                                && (body.temp - state.temps.solar) > heater.stopTempDelta // 4
+                                                && body.temp > (cfgBody.coolSetpoint + heater.stopTempDelta) // 5
+                                            ) {
+                                                // else if (heater.coolingEnabled && (body.temp > cfgBody.coolSetpoint -  heater.stopTempDelta && body.temp < cfgBody.coolSetpoint - heater.startTempDelta) && state.heliotrope.isNight && state.temps.solar < body.temp) {
                                                 isOn = true;
                                                 body.heatStatus = sys.board.valueMaps.heatStatus.getValue('cooling');
                                                 isHeating = true;
                                                 isCooling = true;
                                             }
+                                            if (hstate.isOn && !isOn) { 
+                                                hState.prevHeaterOffTemp = body.temp; 
+                                            } // 6  
                                         }
                                         break;
                                     case 'ultratemp':
@@ -4556,7 +4627,8 @@ export class ValveCommands extends BoardCommands {
             let drain = sys.equipment.shared ? typeof state.circuits.get().find(elem => typeof elem.type !== 'undefined' && elem.type.name === 'spadrain' && elem.isOn === true) !== 'undefined' ||
                 typeof state.features.get().find(elem => typeof elem.type !== 'undefined' && elem.type.name === 'spadrain' && elem.isOn === true) !== 'undefined' : false;
             // Check to see if there is a spillway circuit or feature on.  If it is on then the return will be diverted no mater what.
-            let spillway = sys.equipment.shared ? typeof state.circuits.get().find(elem => typeof elem.type !== 'undefined' && elem.type.name === 'spillway' && elem.isOn === true) !== 'undefined' ||
+            let spillway = sys.equipment.shared ? 
+                typeof state.circuits.get().find(elem => typeof elem.type !== 'undefined' && elem.type.name === 'spillway' && elem.isOn === true) !== 'undefined' ||
                 typeof state.features.get().find(elem => typeof elem.type !== 'undefined' && elem.type.name === 'spillway' && elem.isOn === true) !== 'undefined' : false;
             let spa = sys.equipment.shared ? state.circuits.getItemById(1).isOn : false;
             let pool = sys.equipment.shared ? state.circuits.getItemById(6).isOn : false;
