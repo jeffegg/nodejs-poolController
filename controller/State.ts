@@ -947,7 +947,7 @@ export class PumpState extends EqState {
     }
     public get id(): number { return this.data.id; }
     public set id(val: number) { this.data.id = val; }
-    public get address(): number { return this.data.address || this.data.id + 95; }
+    public get address(): number { return this.data.address; }
     public set address(val: number) { this.setDataVal('address', val); }
     public get name(): string { return this.data.name; }
     public set name(val: string) { this.setDataVal('name', val); }
@@ -1042,6 +1042,7 @@ export class PumpState extends EqState {
                 case 'hwvs':
                 case 'vssvrs':
                 case 'vs':
+                case 'regalmodbus':
                     c.units = sys.board.valueMaps.pumpUnits.transformByName('rpm');
                     break;
                 case 'ss':
@@ -1096,7 +1097,7 @@ export class ScheduleStateCollection extends EqStateCollection<ScheduleState> {
             }
             st.calcSchedule(state.time, sys.schedules.getItemById(ssched.id));
             if (typeof st.startTime === 'undefined') continue;
-            if (ssched.isOn || st.shouldBeOn || st.startTime.getTime() > new Date().getTime()) activeScheds.push(ssched);
+            if (ssched.isOn || st.shouldBeOn || (st.startTime && st.startTime.getTime() > new Date().getTime())) activeScheds.push(ssched);
         }
         return activeScheds;
     }
@@ -1256,7 +1257,7 @@ export class ScheduleTime extends ChildEqState {
             let dtCalc = typeof this.calculatedDate !== 'undefined' && typeof this.calculatedDate.getTime === 'function' ? new Date(this.calculatedDate.getTime()).setHours(0, 0, 0, 0) : new Date(1970, 0, 1, 0, 0).getTime();
             let recalc = !this.calculated;
             if (!recalc && sod.getTime() !== dtCalc) recalc = true;
-            if (!recalc && (this.endTime.getTime() < new Date().getTime() && this.startTime.getTime() < dtCalc)) {
+            if (!recalc && (this.endTime && this.endTime.getTime() < new Date().getTime() && this.startTime && this.startTime.getTime() < dtCalc)) {
                 recalc = true;
                 logger.info(`Recalculating expired schedule ${sched.id}`);
             }
